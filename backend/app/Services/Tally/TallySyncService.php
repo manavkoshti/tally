@@ -16,7 +16,23 @@ class TallySyncService
 
     public function syncVoucher(Voucher $voucher): array
     {
-        $voucher->load('company');
+        $voucher->load('company', 'entries.ledger');
+
+        foreach ($voucher->entries as $entry) {
+            $ledger = $entry->ledger;
+            if (!$ledger || $ledger->synced_to_tally) {
+                continue;
+            }
+            $result = $this->syncLedger($ledger);
+            if (!$result['success']) {
+                $voucher->update(['tally_sync_status' => 'failed']);
+                $this->propagateStatusToInvoice($voucher, 'failed');
+                return [
+                    'success' => false,
+                    'error' => "Ledger sync failed for '{$ledger->name}': " . ($result['error'] ?? 'Unknown error'),
+                ];
+            }
+        }
 
         $xml = $this->xmlGenerator->generateVoucherXml($voucher);
         $host = $voucher->company->tally_host ?? 'localhost';
@@ -48,8 +64,10 @@ class TallySyncService
                     'tally_sync_status' => 'synced',
                     'tally_synced_at' => now(),
                 ]);
+                $this->propagateStatusToInvoice($voucher, 'synced');
             } else {
                 $voucher->update(['tally_sync_status' => 'failed']);
+                $this->propagateStatusToInvoice($voucher, 'failed');
             }
 
             return ['success' => $success, 'response' => $response, 'log_id' => $log->id];
@@ -62,8 +80,16 @@ class TallySyncService
                 'synced_at' => now(),
             ]);
             $voucher->update(['tally_sync_status' => 'failed']);
+            $this->propagateStatusToInvoice($voucher, 'failed');
 
             return ['success' => false, 'error' => $errorMessage, 'log_id' => $log->id];
+        }
+    }
+
+    private function propagateStatusToInvoice(Voucher $voucher, string $status): void
+    {
+        if ($voucher->invoice_id) {
+            \App\Models\Invoice::where('id', $voucher->invoice_id)->update(['tally_sync_status' => $status]);
         }
     }
 
@@ -119,7 +145,16 @@ class TallySyncService
 
     private function parseResponse(string $response): bool
     {
-        return str_contains(strtolower($response), '<lineerror>') === false
-            && (str_contains(strtolower($response), 'success') || str_contains($response, 'Created'));
+        $lower = strtolower($response);
+        if (str_contains($lower, '<lineerror>')) {
+            return false;
+        }
+        if (preg_match('/<created>(\d+)<\/created>/i', $response, $m) && (int) $m[1] > 0) {
+            return true;
+        }
+        if (preg_match('/<altered>(\d+)<\/altered>/i', $response, $m) && (int) $m[1] > 0) {
+            return true;
+        }
+        return str_contains($lower, 'success');
     }
 }

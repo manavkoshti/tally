@@ -13,11 +13,24 @@ class TallyXmlGenerator
 
         $voucherTypeName = ucfirst($voucher->voucher_type);
         $date = $voucher->voucher_date->format('Ymd');
+        $companyName = $this->escapeXml($voucher->company->tally_company_name);
+        $narration = $this->escapeXml($voucher->narration ?? '');
+        $voucherNumber = $this->escapeXml($voucher->voucher_number ?? '');
+
+        $partyLedgerName = '';
+        $partyEntry = $voucher->entries->first(fn($e) => in_array(optional($e->ledger)->type, ['debtor', 'creditor']));
+        if ($partyEntry && $partyEntry->ledger) {
+            $partyLedgerName = $this->escapeXml($partyEntry->ledger->name);
+        }
+
+        $isInvoice = 'No';
+        $vchView = 'Accounting Voucher View';
 
         $allLedgerEntries = '';
         foreach ($voucher->entries as $entry) {
             $amount = $entry->entry_type === 'debit' ? $entry->amount : -$entry->amount;
-            $allLedgerEntries .= $this->buildLedgerEntry($entry->ledger->name, $amount, $entry->cgst_amount, $entry->sgst_amount, $entry->igst_amount);
+            $isDeemed = $partyEntry && $entry->id === $partyEntry->id ? 'Yes' : 'No';
+            $allLedgerEntries .= $this->buildLedgerEntry($entry->ledger->name, $amount, $entry->cgst_amount, $entry->sgst_amount, $entry->igst_amount, $isDeemed);
         }
 
         return <<<XML
@@ -30,17 +43,21 @@ class TallyXmlGenerator
       <REQUESTDESC>
         <REPORTNAME>Vouchers</REPORTNAME>
         <STATICVARIABLES>
-          <SVCURRENTCOMPANY>{$voucher->company->tally_company_name}</SVCURRENTCOMPANY>
+          <SVCURRENTCOMPANY>{$companyName}</SVCURRENTCOMPANY>
         </STATICVARIABLES>
       </REQUESTDESC>
       <REQUESTDATA>
         <TALLYMESSAGE xmlns:UDF="TallyUDF">
-          <VOUCHER VCHTYPE="{$voucherTypeName}" ACTION="Create">
+          <VOUCHER VCHTYPE="{$voucherTypeName}" ACTION="Create" OBJVIEW="{$vchView}">
             <DATE>{$date}</DATE>
+            <EFFECTIVEDATE>{$date}</EFFECTIVEDATE>
             <VOUCHERTYPENAME>{$voucherTypeName}</VOUCHERTYPENAME>
-            <VOUCHERNUMBER>{$voucher->voucher_number}</VOUCHERNUMBER>
-            <NARRATION>{$this->escapeXml($voucher->narration)}</NARRATION>
-            <ISINVOICE>Yes</ISINVOICE>
+            <VOUCHERNUMBER>{$voucherNumber}</VOUCHERNUMBER>
+            <PARTYLEDGERNAME>{$partyLedgerName}</PARTYLEDGERNAME>
+            <PARTYNAME>{$partyLedgerName}</PARTYNAME>
+            <NARRATION>{$narration}</NARRATION>
+            <PERSISTEDVIEW>{$vchView}</PERSISTEDVIEW>
+            <ISINVOICE>{$isInvoice}</ISINVOICE>
             {$allLedgerEntries}
           </VOUCHER>
         </TALLYMESSAGE>
@@ -72,7 +89,7 @@ XML;
         <TALLYMESSAGE xmlns:UDF="TallyUDF">
           <LEDGER NAME="{$this->escapeXml($ledger->name)}" ACTION="Create">
             <NAME>{$this->escapeXml($ledger->name)}</NAME>
-            <PARENT>{$this->getLedgerParentGroup($ledger->type)}</PARENT>
+            <PARENT>{$this->escapeXml($this->getLedgerParentGroup($ledger->type))}</PARENT>
             <GSTIN>{$this->escapeXml($ledger->gstin ?? '')}</GSTIN>
             <OPENINGBALANCE>{$ledger->opening_balance}</OPENINGBALANCE>
           </LEDGER>
@@ -84,24 +101,15 @@ XML;
 XML;
     }
 
-    private function buildLedgerEntry(string $ledgerName, float $amount, float $cgst, float $sgst, float $igst): string
+    private function buildLedgerEntry(string $ledgerName, float $amount, float $cgst, float $sgst, float $igst, string $isDeemedPositive = 'No'): string
     {
-        $gstDetails = '';
-        if ($cgst > 0) {
-            $gstDetails .= "<TAXCLASSIFICATIONDETAILS.LIST><TAXCLASSIFICATIONNAME>CGST</TAXCLASSIFICATIONNAME><AMOUNT>{$cgst}</AMOUNT></TAXCLASSIFICATIONDETAILS.LIST>";
-        }
-        if ($sgst > 0) {
-            $gstDetails .= "<TAXCLASSIFICATIONDETAILS.LIST><TAXCLASSIFICATIONNAME>SGST/UTGST</TAXCLASSIFICATIONNAME><AMOUNT>{$sgst}</AMOUNT></TAXCLASSIFICATIONDETAILS.LIST>";
-        }
-        if ($igst > 0) {
-            $gstDetails .= "<TAXCLASSIFICATIONDETAILS.LIST><TAXCLASSIFICATIONNAME>IGST</TAXCLASSIFICATIONNAME><AMOUNT>{$igst}</AMOUNT></TAXCLASSIFICATIONDETAILS.LIST>";
-        }
+        $name = $this->escapeXml($ledgerName);
 
         return <<<XML
 <ALLLEDGERENTRIES.LIST>
-  <LEDGERNAME>{$this->escapeXml($ledgerName)}</LEDGERNAME>
+  <LEDGERNAME>{$name}</LEDGERNAME>
+  <ISDEEMEDPOSITIVE>{$isDeemedPositive}</ISDEEMEDPOSITIVE>
   <AMOUNT>{$amount}</AMOUNT>
-  {$gstDetails}
 </ALLLEDGERENTRIES.LIST>
 XML;
     }
