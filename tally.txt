@@ -1,0 +1,524 @@
+PROJECT NAME:
+AI Accounting Automation System with Tally Integration
+
+PROJECT TYPE:
+Web Application (NOT Mobile App)
+
+TECH STACK:
+Frontend:
+- React JS
+- Vite
+- Tailwind CSS
+- Axios
+- React Router
+- React Query
+
+Backend:
+- Laravel Latest Version
+- REST API
+- Laravel Sanctum Authentication
+
+Database:
+- MySQL
+
+OTHER TOOLS:
+- OCR Invoice Reader
+- Tally XML Integration
+- AI Accounting Engine
+- Queue System
+- Redis (optional later)
+
+===========================================================
+PROJECT GOAL
+===========================================================
+
+I want to build a smart accounting automation web application.
+
+The goal is:
+
+Users should upload invoices or create invoices manually,
+and the system should automatically generate accounting entries
+like Tally accountant entries.
+
+The system should automatically:
+- detect invoice type
+- detect GST
+- detect party/customer/vendor
+- create ledger mappings
+- generate debit/credit entries
+- create vouchers
+- sync entries into Tally Prime automatically
+
+The system should reduce manual accountant work.
+
+This is NOT a simple invoice software.
+This is an accounting automation platform.
+
+===========================================================
+IMPORTANT REQUIREMENTS
+===========================================================
+
+1. DO NOT change project flow.
+2. DO NOT change architecture.
+3. DO NOT skip steps.
+4. All code should be production-ready.
+5. Proper scalable folder structure required.
+6. Proper API structure required.
+7. Proper database normalization required.
+8. Proper validation required.
+9. Proper error handling required.
+10. Proper authentication required.
+11. Proper accounting logic required.
+12. Professional UI required.
+13. Responsive design required.
+14. Clean and maintainable code required.
+15. Use industry standard architecture.
+16. Make sure complete flow works without breaking.
+
+===========================================================
+CORE SYSTEM FLOW
+===========================================================
+
+STEP 1:
+User logs into dashboard.
+
+STEP 2:
+User uploads invoice:
+- PDF
+- Image
+- Manual Entry
+
+STEP 3:
+OCR system extracts:
+- Invoice Number
+- Party Name
+- GST Number
+- Invoice Date
+- Items
+- Tax
+- Amount
+- Invoice Type
+
+STEP 4:
+Accounting engine analyzes invoice.
+
+STEP 5:
+System automatically determines:
+- Sales Entry
+- Purchase Entry
+- Expense Entry
+- Journal Entry
+- GST Entry
+
+STEP 6:
+System maps ledgers automatically.
+
+STEP 7:
+System generates voucher.
+
+STEP 8:
+Voucher converts into Tally XML format.
+
+STEP 9:
+Voucher syncs into Tally Prime automatically.
+
+STEP 10:
+User sees:
+- Success status
+- Voucher number
+- Logs
+- Reports
+
+===========================================================
+MODULES REQUIRED
+===========================================================
+
+1. Authentication Module
+2. Dashboard Module
+3. Invoice Upload Module
+4. OCR Processing Module
+5. Ledger Management Module
+6. Accounting Engine Module
+7. Voucher Generation Module
+8. Tally XML Generator Module
+9. Tally Sync Module
+10. Reports Module
+11. Audit Logs Module
+12. Settings Module
+13. User Roles & Permissions Module
+
+===========================================================
+AUTHENTICATION REQUIREMENTS
+===========================================================
+
+Use Laravel Sanctum.
+
+Features:
+- Login
+- Register
+- Forgot Password
+- Email Verification
+- Secure Token Authentication
+- Session Management
+
+Roles:
+- Admin
+- Accountant
+- Staff
+
+===========================================================
+FRONTEND REQUIREMENTS
+===========================================================
+
+Use React JS + Vite.
+
+UI Requirements:
+- Premium dashboard UI
+- Professional ERP style design
+- Sidebar navigation
+- Top navbar
+- Responsive layout
+- Dark/Light mode optional
+- Reusable components
+
+Pages:
+- Login
+- Register
+- Dashboard
+- Upload Invoice
+- Invoice List
+- Voucher List
+- Ledger List
+- Reports
+- Settings
+- User Management
+- Logs
+
+Use:
+- Tailwind CSS
+- React Router
+- Axios
+- React Query
+
+===========================================================
+BACKEND REQUIREMENTS
+===========================================================
+
+Use Laravel latest version.
+
+Architecture:
+- Controllers
+- Services
+- Repositories
+- Traits
+- Policies
+- Middleware
+- API Resources
+
+API Structure:
+- RESTful APIs
+- Versioned APIs
+
+Example:
+api/v1/
+
+Use:
+- Form Request Validation
+- Proper Exception Handling
+- Queue Jobs
+- Event Listeners
+
+===========================================================
+DATABASE REQUIREMENTS
+===========================================================
+
+Use MySQL.
+
+Create proper normalized tables.
+
+Tables Required:
+- users
+- companies
+- invoices
+- invoice_items
+- ledgers
+- voucher_types
+- vouchers
+- voucher_entries
+- gst_details
+- tally_sync_logs
+- audit_logs
+- settings
+- roles
+- permissions
+
+Use:
+- Foreign keys
+- Indexing
+- UUIDs where required
+
+===========================================================
+OCR SYSTEM REQUIREMENTS
+===========================================================
+
+Invoice OCR should support:
+- PDF invoices
+- Image invoices
+
+OCR should extract:
+- Party name
+- GSTIN
+- Invoice date
+- Invoice number
+- HSN/SAC
+- Tax values
+- Total amount
+
+Use modular architecture so OCR provider can change later.
+
+Initially use:
+- Google Vision API
+OR
+- Tesseract OCR
+
+===========================================================
+ACCOUNTING ENGINE REQUIREMENTS
+===========================================================
+
+This is the most important module.
+
+System should automatically decide accounting entries.
+
+Example:
+
+Sales Invoice:
+Debit:
+Customer Ledger
+
+Credit:
+Sales Ledger
+CGST
+SGST
+
+Purchase Invoice:
+Debit:
+Purchase Ledger
+Input CGST
+Input SGST
+
+Credit:
+Vendor Ledger
+
+Rules engine required.
+
+System should support:
+- Sales
+- Purchase
+- Expense
+- Journal
+- Payment
+- Receipt
+
+===========================================================
+LEDGER AUTO MAPPING
+===========================================================
+
+System should:
+- Auto detect existing ledger
+- Auto create new ledger if not found
+- Match GST numbers
+- Match party names intelligently
+
+===========================================================
+VOUCHER SYSTEM REQUIREMENTS
+===========================================================
+
+Voucher Types:
+- Sales
+- Purchase
+- Payment
+- Receipt
+- Contra
+- Journal
+
+Voucher entries should support:
+- debit
+- credit
+- narration
+- gst breakup
+
+===========================================================
+TALLY INTEGRATION REQUIREMENTS
+===========================================================
+
+MOST IMPORTANT.
+
+System must integrate with Tally Prime.
+
+Use:
+- Tally XML Import
+- Tally HTTP XML API
+
+Requirements:
+- Generate XML vouchers
+- Push XML into Tally
+- Handle response
+- Store sync logs
+- Handle failures
+
+Support:
+- Sales Voucher
+- Purchase Voucher
+- Ledger Creation
+
+===========================================================
+TALLY CONNECTION FLOW
+===========================================================
+
+1. Tally running locally
+2. Tally XML server enabled
+3. Laravel backend generates XML
+4. Backend sends XML request
+5. Tally creates voucher
+6. Response stored in database
+
+===========================================================
+REPORTS REQUIRED
+===========================================================
+
+Reports:
+- Sales Report
+- Purchase Report
+- GST Report
+- Failed Sync Report
+- Voucher Report
+- Audit Report
+
+===========================================================
+AUDIT LOG SYSTEM
+===========================================================
+
+Track:
+- Who created invoice
+- Who edited invoice
+- Sync status
+- Failed entries
+- Voucher modifications
+
+===========================================================
+ERROR HANDLING REQUIREMENTS
+===========================================================
+
+Handle:
+- Invalid OCR
+- Duplicate invoices
+- Tally offline
+- XML failures
+- GST mismatch
+- Missing ledgers
+
+===========================================================
+SECURITY REQUIREMENTS
+===========================================================
+
+Use:
+- CSRF protection
+- XSS protection
+- API throttling
+- Validation
+- Authentication middleware
+- Role permissions
+
+===========================================================
+PROJECT STRUCTURE REQUIREMENTS
+===========================================================
+
+Frontend and backend should be separate.
+
+Structure:
+
+frontend/
+backend/
+
+Use scalable enterprise architecture.
+
+===========================================================
+DEVELOPMENT PHASES
+===========================================================
+
+PHASE 1:
+Project setup
+
+PHASE 2:
+Authentication system
+
+PHASE 3:
+Dashboard UI
+
+PHASE 4:
+Invoice upload system
+
+PHASE 5:
+OCR integration
+
+PHASE 6:
+Accounting engine
+
+PHASE 7:
+Voucher generation
+
+PHASE 8:
+Tally XML integration
+
+PHASE 9:
+Reports
+
+PHASE 10:
+Testing and optimization
+
+===========================================================
+IMPORTANT DEVELOPMENT RULES
+===========================================================
+
+1. Build step by step.
+2. Do not skip architecture planning.
+3. First create backend APIs.
+4. Then create frontend integration.
+5. Use proper naming conventions.
+6. Use reusable components.
+7. Use clean coding standards.
+8. Use service classes.
+9. Use repository pattern.
+10. Create scalable architecture.
+
+===========================================================
+FINAL GOAL
+===========================================================
+
+The final software should work like this:
+
+User uploads invoice →
+System reads invoice →
+System generates accounting entry →
+System creates voucher →
+System syncs voucher into Tally →
+User sees successful accounting automation.
+
+The entire process should minimize manual accountant work.
+
+===========================================================
+NOW START DEVELOPMENT
+===========================================================
+
+First:
+1. Create complete project architecture
+2. Create database schema
+3. Create backend folder structure
+4. Create frontend folder structure
+5. Create API planning
+6. Create authentication system
+7. Then continue module by module
+
+Do not jump directly into coding everything together.
+
+Build professionally step by step.
