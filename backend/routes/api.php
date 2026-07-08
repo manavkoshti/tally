@@ -5,6 +5,7 @@ use App\Http\Controllers\Api\V1\Invoice\InvoiceController;
 use App\Http\Controllers\Api\V1\Ledger\LedgerController;
 use App\Http\Controllers\Api\V1\Voucher\VoucherController;
 use App\Http\Controllers\Api\V1\Report\ReportController;
+use App\Http\Controllers\Api\V1\Tally\TallyController;
 use App\Http\Controllers\Api\V1\User\UserController;
 use Illuminate\Support\Facades\Route;
 
@@ -36,6 +37,12 @@ Route::prefix('v1')->group(function () {
             Route::get('{id}', [InvoiceController::class, 'show']);
             Route::delete('{id}', [InvoiceController::class, 'destroy']);
             Route::post('{id}/process-accounting', [InvoiceController::class, 'processAccounting']);
+            Route::post('{id}/sync-tally', [InvoiceController::class, 'syncToTally']);
+        });
+
+        // Tally
+        Route::prefix('tally')->group(function () {
+            Route::get('test-connection', [TallyController::class, 'testConnection']);
         });
 
         // Ledgers

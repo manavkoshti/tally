@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { Plus, Search, Trash2, Eye, Zap, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Plus, Search, Trash2, Eye, Zap, RefreshCw, AlertCircle, ChevronLeft, ChevronRight } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { invoicesApi } from '../../api/invoices'
+import { tallyApi } from '../../api/tally'
 import PageHeader from '../../components/common/PageHeader'
 import StatusBadge from '../../components/common/StatusBadge'
 import LoadingSpinner from '../../components/common/LoadingSpinner'
@@ -34,6 +35,23 @@ export default function InvoiceList() {
     },
   })
 
+  const syncTallyMutation = useMutation({
+    mutationFn: invoicesApi.syncTally,
+    onSuccess: () => {
+      toast.success('Tally sync queued')
+      queryClient.invalidateQueries({ queryKey: ['invoices'] })
+    },
+    onError: (err) => toast.error(err?.response?.data?.message ?? 'Failed to start sync'),
+  })
+
+  const { data: tallyHealth } = useQuery({
+    queryKey: ['tally-health'],
+    queryFn: () => tallyApi.testConnection().then(r => r.data?.data),
+    refetchInterval: 30000,
+    retry: false,
+  })
+  const tallyReachable = tallyHealth?.reachable
+
   const invoiceTypes = ['', 'sales', 'purchase', 'expense', 'journal', 'payment', 'receipt']
   const fmt = (n) => `₹${Number(n ?? 0).toLocaleString('en-IN')}`
 
@@ -49,6 +67,16 @@ export default function InvoiceList() {
           </Link>
         }
       />
+
+      {tallyHealth && !tallyReachable && (
+        <div className="mb-4 flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+          <AlertCircle size={18} className="mt-0.5 flex-shrink-0" />
+          <div>
+            <p className="font-medium">Tally is not reachable {tallyHealth?.host && tallyHealth?.port ? `at ${tallyHealth.host}:${tallyHealth.port}` : ''}.</p>
+            <p className="text-xs opacity-90 mt-0.5">{tallyHealth?.message ?? 'Start Tally, open a company, and enable ODBC Server (F12 > Advanced).'} Invoices will keep saving; sync will resume automatically once Tally is online.</p>
+          </div>
+        </div>
+      )}
 
       {/* Filters */}
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 mb-6 flex flex-wrap gap-3">
@@ -117,6 +145,16 @@ export default function InvoiceList() {
                               title="Process Accounting"
                             >
                               <Zap size={16} />
+                            </button>
+                          )}
+                          {inv.accounting_status === 'completed' && inv.tally_sync_status !== 'synced' && (
+                            <button
+                              onClick={() => syncTallyMutation.mutate(inv.id)}
+                              disabled={syncTallyMutation.isPending}
+                              className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded transition disabled:opacity-40"
+                              title="Retry Tally Sync"
+                            >
+                              <RefreshCw size={16} />
                             </button>
                           )}
                           <button

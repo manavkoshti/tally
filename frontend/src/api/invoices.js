@@ -8,4 +8,5 @@ export const invoicesApi = {
   }),
   delete: (id) => api.delete(`/invoices/${id}`),
   processAccounting: (id) => api.post(`/invoices/${id}/process-accounting`),
+  syncTally: (id) => api.post(`/invoices/${id}/sync-tally`),
 }

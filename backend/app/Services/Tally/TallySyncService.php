@@ -6,7 +6,8 @@ use App\Models\Voucher;
 use App\Models\Ledger;
 use App\Models\TallySyncLog;
 use GuzzleHttp\Client;
-use GuzzleHttp\Exception\RequestException;
+use GuzzleHttp\Exception\ConnectException;
+use GuzzleHttp\Exception\GuzzleException;
 
 class TallySyncService
 {
@@ -25,11 +26,18 @@ class TallySyncService
             }
             $result = $this->syncLedger($ledger);
             if (!$result['success']) {
-                $voucher->update(['tally_sync_status' => 'failed']);
-                $this->propagateStatusToInvoice($voucher, 'failed');
+                $isConnectionError = $result['connection_error'] ?? false;
+                $newStatus = $isConnectionError ? 'pending' : 'failed';
+
+                $voucher->update(['tally_sync_status' => $newStatus]);
+                $this->propagateStatusToInvoice($voucher, $newStatus);
+
                 return [
                     'success' => false,
-                    'error' => "Ledger sync failed for '{$ledger->name}': " . ($result['error'] ?? 'Unknown error'),
+                    'connection_error' => $isConnectionError,
+                    'error' => $isConnectionError
+                        ? 'Tally is not reachable. Please make sure Tally is running and ODBC is enabled on port ' . ($voucher->company->tally_port ?? 9000) . '.'
+                        : "Ledger sync failed for '{$ledger->name}': " . ($result['error'] ?? 'Unknown error'),
                 ];
             }
         }
@@ -55,6 +63,7 @@ class TallySyncService
             $log->update([
                 'status' => $success ? 'success' : 'failed',
                 'xml_response' => $response,
+                'error_message' => $success ? null : $this->extractTallyError($response),
                 'response_code' => 200,
                 'synced_at' => now(),
             ]);
@@ -72,7 +81,24 @@ class TallySyncService
 
             return ['success' => $success, 'response' => $response, 'log_id' => $log->id];
 
-        } catch (RequestException $e) {
+        } catch (ConnectException $e) {
+            $errorMessage = "Tally is not reachable at {$host}:{$port}. Start Tally and enable ODBC.";
+            $log->update([
+                'status' => 'failed',
+                'error_message' => $errorMessage . ' [' . $e->getMessage() . ']',
+                'synced_at' => now(),
+            ]);
+            // Treat as transient: keep status pending so retries/manual sync can resume.
+            $voucher->update(['tally_sync_status' => 'pending']);
+            $this->propagateStatusToInvoice($voucher, 'pending');
+
+            return [
+                'success' => false,
+                'connection_error' => true,
+                'error' => $errorMessage,
+                'log_id' => $log->id,
+            ];
+        } catch (GuzzleException | \Throwable $e) {
             $errorMessage = $e->getMessage();
             $log->update([
                 'status' => 'failed',
@@ -118,6 +144,7 @@ class TallySyncService
             $log->update([
                 'status' => $success ? 'success' : 'failed',
                 'xml_response' => $response,
+                'error_message' => $success ? null : $this->extractTallyError($response),
                 'synced_at' => now(),
             ]);
 
@@ -127,15 +154,71 @@ class TallySyncService
 
             return ['success' => $success, 'response' => $response];
 
-        } catch (RequestException $e) {
-            $log->update(['status' => 'failed', 'error_message' => $e->getMessage()]);
+        } catch (ConnectException $e) {
+            $log->update([
+                'status' => 'failed',
+                'error_message' => "Tally unreachable at {$host}:{$port} [" . $e->getMessage() . ']',
+                'synced_at' => now(),
+            ]);
+            return [
+                'success' => false,
+                'connection_error' => true,
+                'error' => "Tally not reachable at {$host}:{$port}",
+            ];
+        } catch (GuzzleException | \Throwable $e) {
+            $log->update([
+                'status' => 'failed',
+                'error_message' => $e->getMessage(),
+                'synced_at' => now(),
+            ]);
             return ['success' => false, 'error' => $e->getMessage()];
+        }
+    }
+
+    public function testConnection(string $host = 'localhost', int $port = 9000): array
+    {
+        $xml = <<<XML
+<ENVELOPE>
+  <HEADER>
+    <VERSION>1</VERSION>
+    <TALLYREQUEST>Export</TALLYREQUEST>
+    <TYPE>Data</TYPE>
+    <ID>List of Companies</ID>
+  </HEADER>
+  <BODY>
+    <DESC>
+      <STATICVARIABLES>
+        <SVEXPORTFORMAT>$SysName:XML</SVEXPORTFORMAT>
+      </STATICVARIABLES>
+    </DESC>
+  </BODY>
+</ENVELOPE>
+XML;
+
+        try {
+            $client = new Client(['timeout' => 5, 'connect_timeout' => 5]);
+            $response = $client->post("http://{$host}:{$port}", [
+                'body' => $xml,
+                'headers' => ['Content-Type' => 'application/xml'],
+            ]);
+            return [
+                'success' => true,
+                'message' => 'Tally is reachable',
+                'response' => (string) $response->getBody(),
+            ];
+        } catch (ConnectException $e) {
+            return [
+                'success' => false,
+                'message' => "Cannot connect to Tally at {$host}:{$port}. Start Tally, open a company, and enable ODBC Server (F12 > Advanced > Tally.ERP 9 acts as Server set to Yes).",
+            ];
+        } catch (\Throwable $e) {
+            return ['success' => false, 'message' => $e->getMessage()];
         }
     }
 
     private function sendToTally(string $xml, string $host, int $port): string
     {
-        $client = new Client(['timeout' => 30]);
+        $client = new Client(['timeout' => 30, 'connect_timeout' => 5]);
         $response = $client->post("http://{$host}:{$port}", [
             'body' => $xml,
             'headers' => ['Content-Type' => 'application/xml'],
@@ -156,5 +239,16 @@ class TallySyncService
             return true;
         }
         return str_contains($lower, 'success');
+    }
+
+    private function extractTallyError(string $response): ?string
+    {
+        if (preg_match('/<LINEERROR>(.*?)<\/LINEERROR>/is', $response, $m)) {
+            return trim(strip_tags($m[1]));
+        }
+        if (preg_match('/<EXCEPTIONS>(.*?)<\/EXCEPTIONS>/is', $response, $m)) {
+            return trim(strip_tags($m[1]));
+        }
+        return null;
     }
 }

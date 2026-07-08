@@ -21,16 +21,23 @@ class AccountingEngine
             $voucherType = $this->determineVoucherType($invoice->invoice_type);
             $entries = $this->buildEntries($invoice, $partyLedger);
 
+            $voucherNumber = $invoice->invoice_number ?: $this->generateVoucherNumber($invoice, $voucherType);
+
             $voucher = Voucher::create([
                 'company_id' => $invoice->company_id,
                 'invoice_id' => $invoice->id,
                 'created_by' => $invoice->user_id,
+                'voucher_number' => $voucherNumber,
                 'voucher_type' => $voucherType,
                 'voucher_date' => $invoice->invoice_date,
                 'amount' => $invoice->total_amount,
-                'narration' => $invoice->narration ?? "Being {$invoice->invoice_type} invoice {$invoice->invoice_number}",
+                'narration' => $invoice->narration ?? "Being {$invoice->invoice_type} invoice {$voucherNumber}",
                 'status' => 'approved',
             ]);
+
+            if (empty($invoice->invoice_number)) {
+                $invoice->update(['invoice_number' => $voucherNumber]);
+            }
 
             foreach ($entries as $index => $entry) {
                 VoucherEntry::create([
@@ -55,19 +62,27 @@ class AccountingEngine
     private function resolvePartyLedger(Invoice $invoice): Ledger
     {
         if ($invoice->party_ledger_id) {
-            return Ledger::find($invoice->party_ledger_id);
+            $existing = Ledger::find($invoice->party_ledger_id);
+            if ($existing) {
+                return $existing;
+            }
         }
 
         $ledgerType = in_array($invoice->invoice_type, ['sales', 'receipt']) ? 'debtor' : 'creditor';
 
-        $ledger = Ledger::where('company_id', $invoice->company_id)
-            ->where(function ($q) use ($invoice) {
-                $q->where('name', 'like', '%' . $invoice->party_name . '%');
-                if ($invoice->party_gstin) {
-                    $q->orWhere('gstin', $invoice->party_gstin);
-                }
-            })
-            ->first();
+        $ledger = null;
+        if ($invoice->party_name || $invoice->party_gstin) {
+            $ledger = Ledger::where('company_id', $invoice->company_id)
+                ->where(function ($q) use ($invoice) {
+                    if ($invoice->party_name) {
+                        $q->where('name', 'like', '%' . $invoice->party_name . '%');
+                    }
+                    if ($invoice->party_gstin) {
+                        $q->orWhere('gstin', $invoice->party_gstin);
+                    }
+                })
+                ->first();
+        }
 
         if (!$ledger) {
             $ledger = Ledger::create([
@@ -79,6 +94,24 @@ class AccountingEngine
         }
 
         return $ledger;
+    }
+
+    private function generateVoucherNumber(Invoice $invoice, string $voucherType): string
+    {
+        $prefix = match ($voucherType) {
+            'sales' => 'SAL',
+            'purchase' => 'PUR',
+            'payment' => 'PAY',
+            'receipt' => 'REC',
+            'journal' => 'JV',
+            default => 'VCH',
+        };
+
+        $count = Voucher::where('company_id', $invoice->company_id)
+            ->where('voucher_type', $voucherType)
+            ->count() + 1;
+
+        return sprintf('%s/%s/%04d', $prefix, now()->format('Y-m'), $count);
     }
 
     private function determineVoucherType(string $invoiceType): string

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\V1\Invoice;
 use App\Http\Controllers\Controller;
 use App\Jobs\ProcessInvoiceOcr;
 use App\Jobs\ProcessInvoiceAccounting;
+use App\Jobs\SyncVoucherToTally;
 use App\Models\Invoice;
 use App\Traits\ApiResponse;
 use Illuminate\Http\JsonResponse;
@@ -103,9 +104,37 @@ class InvoiceController extends Controller
             return $this->errorResponse('Invoice accounting already completed.');
         }
 
+        if ($invoice->accounting_status === 'processing') {
+            return $this->errorResponse('Invoice accounting is already in progress.');
+        }
+
+        $invoice->update(['accounting_status' => 'processing']);
         ProcessInvoiceAccounting::dispatch($invoice);
 
         return $this->successResponse(null, 'Accounting processing started.');
+    }
+
+    public function syncToTally(Request $request, int $id): JsonResponse
+    {
+        $invoice = Invoice::where('company_id', $request->user()->company_id)
+            ->with('vouchers')
+            ->findOrFail($id);
+
+        $voucher = $invoice->vouchers->first();
+
+        if (!$voucher) {
+            return $this->errorResponse('No voucher found for this invoice. Process accounting first.');
+        }
+
+        if ($voucher->tally_sync_status === 'synced') {
+            return $this->errorResponse('Invoice is already synced to Tally.');
+        }
+
+        $invoice->update(['tally_sync_status' => 'pending']);
+        $voucher->update(['tally_sync_status' => 'pending']);
+        SyncVoucherToTally::dispatch($voucher);
+
+        return $this->successResponse(null, 'Tally sync queued. It will retry automatically if Tally is offline.');
     }
 
     public function destroy(Request $request, int $id): JsonResponse
@@ -127,7 +156,8 @@ class InvoiceController extends Controller
         $cgstTotal = 0;
         $sgstTotal = 0;
         $igstTotal = 0;
-        $isInterstate = $this->isInterstate($gstin);
+        $companyGstin = $invoice->company?->gstin;
+        $isInterstate = $this->isInterstate($gstin, $companyGstin);
 
         foreach ($items as $item) {
             $quantity = (float) ($item['quantity'] ?? 1);
@@ -182,9 +212,13 @@ class InvoiceController extends Controller
         ]);
     }
 
-    private function isInterstate(?string $gstin): bool
+    private function isInterstate(?string $partyGstin, ?string $companyGstin): bool
     {
-        // Basic check - in real scenario compare state codes
-        return false;
+        // GST state code = first 2 digits of GSTIN. Different code => interstate (IGST).
+        if (!$partyGstin || !$companyGstin) {
+            return false;
+        }
+
+        return substr($partyGstin, 0, 2) !== substr($companyGstin, 0, 2);
     }
 }
